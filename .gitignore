@@ -1,0 +1,14 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+venv/
+.venv/
+
+# Local secrets
+.env
+
+output/
+
+Blunder_Vulnerability_Prediction.ipynb
