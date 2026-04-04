@@ -6,11 +6,11 @@
 import json
 import time
 import logging
-from typing import List, Optional
+from typing import List
 
 import requests
 
-from settings import API_DELAY, LEADERBOARD_VARIANTS
+from settings import API_DELAY, LEADERBOARD_VARIANTS, TOURNAMENTS_TO_SCAN
 
 logger = logging.getLogger(__name__)
 
@@ -69,13 +69,13 @@ class LichessClient:
         """
         url = f"{LICHESS_BASE}/games/user/{username}"
         params = {
-            "max":        max_games,
-            "rated":      "true",
-            "analysed":   "true",   # only pre-analysed games
-            "evals":      "true",   # include per-move evaluations
-            "clocks":     "true",   # include clock times
-            "opening":    "true",   # include opening name / ECO
-            "pgnInJson":  "true",
+            "max": max_games,
+            "rated": "true",
+            "analysed": "true",   # only pre-analysed games
+            "evals": "true",      # include per-move evaluations
+            "clocks": "true",     # include clock times
+            "opening": "true",    # include opening name / ECO
+            "pgnInJson": "true",
         }
         headers = {**self.session.headers, "Accept": "application/x-ndjson"}
 
@@ -83,12 +83,17 @@ class LichessClient:
             response = None
             try:
                 response = self.session.get(
-                    url, params=params, headers=headers,
-                    stream=True, timeout=(10, 180),
+                    url,
+                    params=params,
+                    headers=headers,
+                    stream=True,
+                    timeout=(10, 180),
                 )
 
                 if response.status_code == 429:
-                    logger.warning(f"Rate limited on {username} (attempt {attempt}/3). Waiting 65s…")
+                    logger.warning(
+                        f"Rate limited on {username} (attempt {attempt}/3). Waiting 65s…"
+                    )
                     time.sleep(65)
                     continue
 
@@ -99,12 +104,14 @@ class LichessClient:
                     if not line:
                         continue
                     game = json.loads(line)
-                    if "analysis" in game:   # drop games without evals
+                    if "analysis" in game:
                         games.append(game)
                 return games
 
-            except (requests.exceptions.ReadTimeout,
-                    requests.exceptions.ChunkedEncodingError) as e:
+            except (
+                requests.exceptions.ReadTimeout,
+                requests.exceptions.ChunkedEncodingError,
+            ) as e:
                 logger.warning(f"Stream error on {username} (attempt {attempt}/3): {e}")
                 time.sleep(2 * attempt)
             except Exception as e:
@@ -116,7 +123,7 @@ class LichessClient:
 
         return []
 
-    def get_recent_tournament_ids(self, count: int = 20) -> List[str]:
+    def get_recent_tournament_ids(self, count: int = TOURNAMENTS_TO_SCAN) -> List[str]:
         """Get IDs of recently finished arena tournaments."""
         url = f"{LICHESS_BASE}/tournament"
         try:
@@ -129,18 +136,30 @@ class LichessClient:
             logger.error(f"get_recent_tournament_ids: {e}")
             return []
 
-    def get_players_by_elo_range(self, min_elo: int, max_elo: int, count: int) -> List[str]:
+    def get_players_by_elo_range(
+        self,
+        min_elo: int,
+        max_elo: int,
+        count: int,
+        *,
+        include_max: bool = True,
+        tournaments_to_scan: int = TOURNAMENTS_TO_SCAN,
+    ) -> List[str]:
         """
-        Get players within an ELO range by scanning recent arena tournament results.
-        Tournament results include username + rating for every participant.
+        Get candidate players within an ELO range by scanning recent arena tournament
+        results. Tournament results include username + rating for every participant.
+
+        Use include_max=False for half-open buckets such as [1400, 1600), which avoids
+        duplicate edge ratings appearing in two adjacent buckets.
         """
-        tournament_ids = self.get_recent_tournament_ids(count=30)
+        tournament_ids = self.get_recent_tournament_ids(count=tournaments_to_scan)
         result = []
         seen = set()
 
         for tid in tournament_ids:
             if len(result) >= count:
                 break
+
             url = f"{LICHESS_BASE}/tournament/{tid}/results"
             try:
                 r = self.session.get(
@@ -151,20 +170,33 @@ class LichessClient:
                     timeout=(10, 30),
                 )
                 r.raise_for_status()
+
                 for line in r.iter_lines(decode_unicode=True):
                     if not line:
                         continue
+
                     player = json.loads(line)
                     username = player.get("username", "")
                     rating = player.get("rating")
-                    if username and rating and username not in seen:
-                        if min_elo <= rating <= max_elo:
-                            seen.add(username)
-                            result.append(username)
-                            if len(result) >= count:
-                                break
+                    if not username or rating is None or username in seen:
+                        continue
+
+                    in_bucket = (
+                        min_elo <= rating <= max_elo
+                        if include_max
+                        else min_elo <= rating < max_elo
+                    )
+                    if not in_bucket:
+                        continue
+
+                    seen.add(username)
+                    result.append(username)
+                    if len(result) >= count:
+                        break
+
             except Exception as e:
                 logger.error(f"tournament results ({tid}): {e}")
+
             time.sleep(API_DELAY)
 
         return result

@@ -8,6 +8,4 @@ venv/
 
 # Local secrets
 .env
-
-# Generated datasets
 output/*.csv
