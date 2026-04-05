@@ -8,10 +8,3 @@ venv/
 
 # Local secrets
 .env
-<<<<<<< HEAD
-=======
-
-output/
-
-Blunder_Vulnerability_Prediction.ipynb
->>>>>>> c6755a2ef400be25159790161acbe118d43a1e45
