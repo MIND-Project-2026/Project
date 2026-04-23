@@ -1,0 +1,16 @@
+Metadata-Version: 2.1
+Name: stchess
+Version: 0.0.1
+Summary: Chess components for Streamlit
+Home-page: UNKNOWN
+Author: TheoLvs
+Author-email: theo.alves.da.costa@gmail.com
+License: UNKNOWN
+Platform: UNKNOWN
+Requires-Python: >=3.6
+Description-Content-Type: text/plain
+Requires-Dist: streamlit (>=0.63)
+
+Chess components for Streamlit
+
+

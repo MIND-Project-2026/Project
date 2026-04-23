@@ -1,0 +1,6 @@
+streamlit
+pandas
+requests
+python-chess
+joblib
+scikit-learn==1.6.1
