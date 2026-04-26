@@ -1,39 +1,5 @@
 #!/usr/bin/env python3
-"""
-Train and use a learned personalized puzzle ranking model.
-
-Important note:
-- This script trains on *proxy labels* built from the current heuristic recommender,
-  because the project does not yet have real player->puzzle outcome data
-  (shown / solved / failed / time to solve / hints used).
-- That still gives you a useful learned ranking model that can replace or complement
-  the hand-written rules. Later, when you collect real interaction logs, you can keep
-  the same structure and swap in true labels.
-
-Modes:
-1) train
-   - reads output/player_weakness_profiles.csv and output/puzzles_final.csv
-   - builds player/puzzle pairs with heuristic compatibility scores
-   - labels top matches as positives and sampled lower-scoring matches as negatives
-   - trains a classifier to predict whether a puzzle is a good fit for a player
-   - saves model + metrics + feature importance + sample predictions
-
-2) recommend
-   - loads the saved model
-   - scores every puzzle for one username
-   - writes a ranked CSV of recommended puzzles
-
-Examples:
-    python personalized_puzzle_ranker.py train
-
-    python personalized_puzzle_ranker.py train \
-        --profiles-csv output/player_weakness_profiles.csv \
-        --puzzles-csv output/puzzles_final.csv
-
-    python personalized_puzzle_ranker.py recommend \
-        --model-path output/model_artifacts/personalized_puzzle_ranker_random_forest.joblib \
-        --username some_player
-"""
+"""Train and run the personalized puzzle ranking model."""
 
 from __future__ import annotations
 
@@ -706,7 +672,7 @@ def recommend_mode(args: argparse.Namespace) -> None:
         "puzzle__best_vs_second_gap_cp",
         "puzzle__engine_best_move_uci",
     ]
-    # restore raw puzzle columns alongside model outputs
+    # Keep raw puzzle fields in the output too.
     output_rows: List[Dict[str, Any]] = []
     for _, row in ranked.iterrows():
         out = {

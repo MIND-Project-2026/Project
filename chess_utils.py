@@ -1,7 +1,4 @@
-# ── core/chess_utils.py ───────────────────────────────────────────────────────
-# Pure helper functions for chess logic.
-# No API calls, no file I/O — just conversions and classification.
-# ─────────────────────────────────────────────────────────────────────────────
+# Chess helper utilities only.
 
 import chess
 from settings import INACCURACY_THRESHOLD, MISTAKE_THRESHOLD, BLUNDER_THRESHOLD
@@ -28,10 +25,7 @@ def piece_name(piece: chess.Piece) -> str:
 
 
 def classify_move(cp_loss: int) -> str:
-    """
-    Bucket a centipawn loss into a quality label.
-    cp_loss should already be clipped to >= 0 before calling this.
-    """
+    """Map centipawn loss to a move-quality label."""
     if cp_loss < INACCURACY_THRESHOLD:
         return "Good"
     elif cp_loss < MISTAKE_THRESHOLD:
@@ -42,10 +36,7 @@ def classify_move(cp_loss: int) -> str:
 
 
 def infer_phase(board: chess.Board) -> str:
-    """
-    Simple heuristic: opening / middlegame / endgame.
-    Based on move number and remaining heavy pieces.
-    """
+    """Guess phase: opening, middlegame, or endgame."""
     heavy = sum(
         len(board.pieces(pt, color))
         for pt in [chess.KNIGHT, chess.BISHOP, chess.ROOK, chess.QUEEN]
@@ -62,15 +53,7 @@ def infer_phase(board: chess.Board) -> str:
 
 
 def extract_cp(eval_entry) -> int:
-    """
-    Convert a Lichess eval entry to a centipawn integer (white's perspective).
-
-    Lichess returns evals in several shapes depending on the endpoint:
-      - plain int                    → use directly
-      - {"eval": int}                → unwrap and recurse
-      - {"cp": int}                  → centipawns
-      - {"mate": int}                → encode as ±(10000 - abs(mate))
-    """
+    """Convert a Lichess eval entry to centipawns (white POV)."""
     if eval_entry is None:
         return 0
     if isinstance(eval_entry, (int, float)):
@@ -88,10 +71,7 @@ def extract_cp(eval_entry) -> int:
 
 
 def best_move_san(eval_entry: dict, board: chess.Board) -> str:
-    """
-    Extract the best move UCI from a Lichess eval entry and convert to SAN.
-    Returns empty string if not available.
-    """
+    """Get best move SAN from an eval entry."""
     if not isinstance(eval_entry, dict):
         return ""
     uci = eval_entry.get("best", "")

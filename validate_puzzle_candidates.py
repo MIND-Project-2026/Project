@@ -1,24 +1,5 @@
 #!/usr/bin/env python3
-"""
-Validate mined puzzle candidates with Stockfish.
-
-What it does:
-- reads puzzle_candidates.csv
-- runs a UCI engine (usually Stockfish) on each candidate FEN
-- records the best move, SAN, PV, eval, mate score, and second-best alternative
-- computes a best-vs-second gap
-- labels whether the position looks like a real puzzle
-
-Typical workflow:
-    python validate_puzzle_candidates.py \
-        --candidates-csv output/puzzle_candidates.csv \
-        --engine-path /path/to/stockfish
-
-Notes:
-- This script keeps all rows by default and adds validation columns.
-- Use --only-valid to write only accepted puzzles.
-- The acceptance rule is intentionally configurable; start conservative, then tune.
-"""
+"""Validate puzzle candidates with Stockfish."""
 
 from __future__ import annotations
 
@@ -119,16 +100,11 @@ def _normalize_bool(value: object) -> bool:
 
 
 def _score_to_parts(score: chess.engine.PovScore, turn: chess.Color, mate_score: int) -> Tuple[Optional[int], Optional[int]]:
-    """
-    Return (cp, mate) from the side-to-move perspective.
-
-    cp: centipawn-equivalent score (mate converted via mate_score)
-    mate: mate distance if available, else None
-    """
+    """Return (cp, mate) from side-to-move POV."""
     pov = score.pov(turn)
     mate = pov.mate()
     if mate is not None:
-        # Convert mate to a huge centipawn band while preserving sign and shorter-mate preference.
+        # Map mate scores into a big cp range.
         cp = mate_score - abs(mate)
         if mate < 0:
             cp = -cp
@@ -380,7 +356,7 @@ def validate_candidates(
         try:
             engine.configure({"Threads": threads, "Hash": hash_mb})
         except Exception:
-            # Some engines or wrappers may not expose these options.
+            # Some engines ignore these options.
             pass
 
         total = len(rows)
@@ -415,7 +391,7 @@ def validate_candidates(
 
 
 OUTPUT_FIELDS = [
-    # original candidate fields
+    # Candidate fields
     "puzzle_id",
     "game_id",
     "trigger_ply",
@@ -462,7 +438,7 @@ OUTPUT_FIELDS = [
     "opponent_name",
     "opponent_elo",
     "target_result",
-    # validation fields
+    # Validation fields
     "engine_best_move_uci",
     "engine_best_move_san",
     "engine_best_pv_uci",

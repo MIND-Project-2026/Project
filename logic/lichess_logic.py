@@ -25,14 +25,7 @@ def check_lichess_username(username: str) -> Tuple[bool, str]:
 
 
 def fetch_games_as_pgn(username: str, max_games: int = 20) -> Tuple[List[Dict[str, Any]], str]:
-    """
-    Kept for UI compatibility: despite the historical name, this now returns
-    raw analysed Lichess game JSON rows, not PGN objects.
-
-    That lets the Streamlit demo reuse the real profile-construction logic
-    (cp loss, move quality, phase/piece/tactic statistics) instead of the old
-    lightweight PGN-only heuristic.
-    """
+    """UI helper: returns analysed game JSON rows (not PGN objects)."""
     username = (username or "").strip()
     if not username:
         return [], "Pseudo vide"

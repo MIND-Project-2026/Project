@@ -21,9 +21,7 @@ DEFAULT_TOP_N = 8
 FIXED_LICHESS_GAMES = 50
 
 
-# -------------------------------------------------------------------
-# Page config
-# -------------------------------------------------------------------
+# Page setup
 
 st.set_page_config(
     page_title="Chess Trainer Complete",
@@ -91,9 +89,7 @@ st.markdown(
 )
 
 
-# -------------------------------------------------------------------
-# Cached resources
-# -------------------------------------------------------------------
+# Cached data/model
 
 @st.cache_data
 def get_puzzles():
@@ -109,9 +105,7 @@ puzzles_df = get_puzzles()
 warm_model()
 
 
-# -------------------------------------------------------------------
 # Session state
-# -------------------------------------------------------------------
 
 def init_state() -> None:
     if "profile" not in st.session_state:
@@ -162,9 +156,7 @@ def reset_current_puzzle(start_fen: str) -> None:
 init_state()
 
 
-# -------------------------------------------------------------------
 # Helpers
-# -------------------------------------------------------------------
 
 def quality_label(score: float, high: str, medium: str, low: str) -> str:
     if score >= 0.95:
@@ -249,9 +241,7 @@ def render_reason_block(reason: str) -> None:
     st.markdown("</div>", unsafe_allow_html=True)
 
 
-# -------------------------------------------------------------------
 # Header
-# -------------------------------------------------------------------
 
 st.markdown(
     """
@@ -266,9 +256,7 @@ st.markdown(
 )
 
 
-# -------------------------------------------------------------------
-# Controls section
-# -------------------------------------------------------------------
+# Profile controls
 
 st.markdown('<div class="card">', unsafe_allow_html=True)
 st.subheader("Construire le profil")
@@ -319,9 +307,7 @@ with tab3:
 st.markdown("</div>", unsafe_allow_html=True)
 
 
-# -------------------------------------------------------------------
 # Profile summary
-# -------------------------------------------------------------------
 
 st.subheader("Résumé du profil")
 
@@ -357,9 +343,7 @@ else:
 st.markdown("</div>", unsafe_allow_html=True)
 
 
-# -------------------------------------------------------------------
 # Recommendations
-# -------------------------------------------------------------------
 
 recs = st.session_state.recommendations.copy()
 

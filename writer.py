@@ -1,7 +1,4 @@
-# ── core/writer.py ────────────────────────────────────────────────────────────
-# Writes collected rows to CSV files.
-# Each function knows exactly which columns belong to which file.
-# ─────────────────────────────────────────────────────────────────────────────
+# CSV writers for collected rows.
 
 import csv
 import os
@@ -11,7 +8,7 @@ from typing import List
 logger = logging.getLogger(__name__)
 
 
-# Column order for each output file
+# Fixed column order for each output file
 GAMES_FIELDS = [
     "game_id", "date_utc", "time_control", "speed", "rated",
     "status", "ply_count",
@@ -48,7 +45,7 @@ PLAYERS_FIELDS = [
     "avg_blunders_per_game", "avg_mistakes_per_game", "win_rate"]
 
 def write_players(rows: List[dict], path: str):
-    """One row per player — identity, ELO bucket, aggregated quality stats."""
+    """Write player rows."""
     _write_csv(rows, path, PLAYERS_FIELDS)
 def _write_csv(rows: List[dict], path: str, fields: List[str]):
     if not rows:
@@ -63,15 +60,15 @@ def _write_csv(rows: List[dict], path: str, fields: List[str]):
 
 
 def write_games(rows: List[dict], path: str):
-    """One row per game — metadata, players, result, opening."""
+    """Write game rows."""
     _write_csv(rows, path, GAMES_FIELDS)
 
 
 def write_moves(rows: List[dict], path: str):
-    """One row per ply — FEN, move, eval, cp_loss, clocks, tactical flags."""
+    """Write move rows."""
     _write_csv(rows, path, MOVES_FIELDS)
 
 
 def write_summary(rows: List[dict], path: str):
-    """One row per (player × game) — aggregated quality stats by phase."""
+    """Write summary rows."""
     _write_csv(rows, path, SUMMARY_FIELDS)
