@@ -1,13 +1,5 @@
 #!/usr/bin/env python3
-"""
-Build blunders.csv from the existing Lichess dataset.
-
-This version only uses data already present in games.csv and moves.csv.
-No new API calls and no new engine run are required.
-
-Each output row corresponds to one target-player error move, typically a
-Mistake or a Blunder, although the quality filter is configurable.
-"""
+"""Build blunders.csv from games.csv and moves.csv."""
 
 from __future__ import annotations
 
@@ -515,7 +507,7 @@ def compute_row(move_row: Dict[str, str], games_by_id: Dict[str, Dict[str, str]]
     material_after = _material_balance(board_after, target_color)
     hanging_after = _hanging_pieces(board_after, target_color)
 
-    # After the player's move, it is the opponent's turn.
+    # Opponent to move after this.
     tactical_flags = _fork_flags(board_after)
 
     result: Dict[str, object] = {

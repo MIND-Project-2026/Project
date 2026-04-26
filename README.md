@@ -1,129 +1,122 @@
-# chess_collector
+# PMIND
 
-Scrapes Lichess games and exports clean CSVs for analysis or ML.
-No local Stockfish needed — uses Lichess cloud evaluations.
+PMIND stands for Personalized Puzzle Mind. It takes real Lichess games, finds the mistakes that matter, builds weakness profiles, and turns them into custom chess puzzles.
 
----
+The goal is simple: give each player puzzles that match how they actually play.
 
-## Structure
+## What’s in the project
 
-```
-PMIND2/
-├── api.py
-├── chess_utils.py
-├── parser.py
-├── writer.py
-├── settings.py
-├── run.py
-└── output/
-```
+- `run.py` collects games from Lichess and writes the raw CSVs.
+- `parser.py`, `chess_utils.py`, and `writer.py` turn game data into a usable dataset.
+- `build_blunders_csv.py` and `build_player_weakness_profile.py` summarize mistakes by player.
+- `mine_puzzle_candidates.py`, `validate_puzzle_candidates.py`, and `build_final_puzzle_dataset.py` create the final puzzle set.
+- `personalized_puzzle_ranker.py` trains and runs the ranking model.
+- `app.py` provides the Streamlit UI for browsing recommendations.
+- `logic/` holds the smaller helpers used by the app and model code.
 
----
+## How it works
 
-## How to run
+1. Pull analyzed games from Lichess.
+2. Parse each game into games, moves, and summaries.
+3. Measure move quality and player weaknesses.
+4. Mine puzzle candidates from the positions that look useful.
+5. Validate the candidates with Stockfish.
+6. Train a model that ranks puzzles by how well they fit a player.
+7. Show the results in the app or export them as CSV files.
+
+## Setup
 
 ```bash
-# Install dependencies
-pip install requests chess
-
-# Collect from leaderboards (uses settings.py defaults)
-python run.py
-
-# Override number of players / games
-python run.py --players 50 --games 20
-
-# Collect specific players only (skips leaderboard fetch)
-python run.py --usernames EricRosen Naroditsky Alireza2003
-
-# Custom output folder
-python run.py --usernames EricRosen --output-dir my_data
+python3 -m venv general-env
+source general-env/bin/activate
+pip install -r requirements.txt
+export LICHESS_API_TOKEN="your_token_here"
 ```
 
----
+If you already have a virtual environment, just activate it and install the requirements.
 
-## Output files
+## Collect games
 
-### `games.csv` — one row per game
-| Column | Description |
-|--------|-------------|
-| `game_id` | Lichess game ID |
-| `date_utc` | Game start time (ISO 8601 UTC) |
-| `time_control` | e.g. `300+0` |
-| `variant` | `standard`, `chess960`, … |
-| `speed` | `blitz`, `rapid`, … |
-| `rated` | True / False |
-| `status` | `mate`, `resign`, `draw`, … |
-| `ply_count` | Total half-moves |
-| `white_name` / `black_name` | Usernames |
-| `white_elo` / `black_elo` | Rating at game time |
-| `white_elo_diff` / `black_elo_diff` | Rating change |
-| `opening_eco` | ECO code (e.g. `B12`) |
-| `opening_name` | Full opening name |
-| `opening_ply` | Ply where opening ends |
-| `target_name` | The player being tracked |
-| `target_color` | `white` or `black` |
-| `opponent_name` | The other player |
-| `target_elo` / `opponent_elo` | Their ratings |
-| `target_result` | `win` / `loss` / `draw` |
-| `target_score` | 1.0 / 0.0 / 0.5 |
+```bash
+python run.py
+python run.py --usernames EricRosen Naroditsky
+python run.py --games 50 --output-dir my_data
+```
 
----
+`run.py` uses the defaults from `settings.py` unless you override them on the command line.
 
-### `moves.csv` — one row per half-move (ply)
-| Column | Description |
-|--------|-------------|
-| `game_id` | Links back to `games.csv` |
-| `ply` | Half-move number (1 = White's first move) |
-| `player_color` | `white` or `black` |
-| `is_target_move` | True when it's the tracked player's turn |
-| `fen_before` | Board state before this move |
-| `phase` | `opening` / `middlegame` / `endgame` |
-| `move_san` | Move in Standard Algebraic Notation (e.g. `Nf3`) |
-| `move_uci` | Move in UCI format (e.g. `g1f3`) |
-| `piece_type` | `Pawn`, `Knight`, `Bishop`, `Rook`, `Queen`, `King` |
-| `is_capture` / `is_check` / `is_castle` / `is_promotion` | Tactical flags |
-| `promotion_piece` | `Q`, `R`, `B`, or `N` if promotion |
-| `best_move_san` / `best_move_uci` | Engine's best move |
-| `eval_white_before` / `eval_white_after` | Position eval in centipawns (White's POV) |
-| `cp_loss` | Centipawn loss (only for target player's moves) |
-| `move_quality` | `Good` / `Inaccuracy` / `Mistake` / `Blunder` |
-| `clock_before_cs` / `clock_after_cs` | Clock before/after in centiseconds |
-| `time_spent_cs` | Time used for this move |
+## Build the puzzle pipeline
 
----
+```bash
+python build_blunders_csv.py
+python build_player_weakness_profile.py
+python mine_puzzle_candidates.py
+python validate_puzzle_candidates.py
+python build_final_puzzle_dataset.py
+```
 
-### `summary.csv` — one row per (player × game)
-| Column | Description |
-|--------|-------------|
-| `target_name` / `game_id` | Identifiers |
-| `target_color` / `speed` / `time_control` / `rated` | Game context |
-| `target_elo` / `opponent_elo` | Ratings |
-| `target_result` / `target_score` | Outcome |
-| `total_moves` | Target player's move count |
-| `mean_cp_loss` / `median_cp_loss` / `p90_cp_loss` | Overall quality stats |
-| `good_moves` / `inaccuracies` / `mistakes` / `blunders` | Error counts |
-| `opening_mean_cp_loss` | Avg cp_loss in opening phase |
-| `middlegame_mean_cp_loss` | Avg cp_loss in middlegame |
-| `endgame_mean_cp_loss` | Avg cp_loss in endgame |
+## Train and recommend
 
-### `players.csv` — one row per player
-| Column | Description |
-|--------|-------------|
-| `username` | Lichess username |
-| `elo` | Detected player ELO from collected games |
-| `elo_bucket` | Sampling bucket label (or `manual`) |
-| `games_collected` | Number of analysed games used |
-| `mean_cp_loss` / `median_cp_loss` | Aggregated quality stats |
-| `blunder_rate` / `mistake_rate` / `inaccuracy_rate` | Error rates over target moves |
-| `avg_blunders_per_game` / `avg_mistakes_per_game` | Mean errors per game |
-| `win_rate` | Mean score from target perspective |
+```bash
+python personalized_puzzle_ranker.py train \
+  --profiles-csv output/player_weakness_profiles.csv \
+  --puzzles-csv output/puzzles_final.csv \
+  --output-dir output/model_artifacts
 
----
+python personalized_puzzle_ranker.py recommend \
+  --model-path output/model_artifacts/personalized_puzzle_ranker_random_forest.joblib \
+  --profiles-csv output/player_weakness_profiles.csv \
+  --puzzles-csv output/puzzles_final.csv \
+  --username YourUsername
+```
 
-## Move quality thresholds (edit in `settings.py`)
-| Label | cp_loss range |
-|-------|--------------|
-| Good | < 50 |
-| Inaccuracy | 50 – 99 |
-| Mistake | 100 – 199 |
-| Blunder | ≥ 200 |
+To browse recommendations in the UI:
+
+```bash
+streamlit run app.py
+```
+
+## Main outputs
+
+- `games.csv` — one row per game
+- `moves.csv` — one row per move
+- `summary.csv` — one row per player-game pair
+- `players.csv` — one row per player
+- `blunders.csv` — filtered mistake moves
+- `player_weakness_profiles.csv` — weakness profile per player
+- `puzzle_candidates.csv` — mined puzzle positions
+- `puzzles_validated.csv` — Stockfish-checked puzzles
+- `puzzles_final.csv` — final puzzle dataset
+- `output/model_artifacts/` — saved model files and metrics
+
+## Data you get
+
+### games.csv
+Game metadata, ratings, opening info, result, and tracked player details.
+
+### moves.csv
+Move-by-move data with the board state, move type, phase, clock info, engine evals, and move quality.
+
+### summary.csv
+One row per player-game pair with move counts, cp loss stats, and error totals.
+
+### players.csv
+One row per player with ELO, sampled bucket, collected games, and overall error rates.
+
+## Move quality
+
+The project uses a simple centipawn scale:
+
+- Good: under 50
+- Inaccuracy: 50–99
+- Mistake: 100–199
+- Blunder: 200 or more
+
+You can change those values in `settings.py`.
+
+## Notes
+
+- The project uses Lichess cloud analysis, so you do not need a local engine to collect games.
+- Stockfish is only used later when validating puzzle candidates.
+- The sample buckets and thresholds in `settings.py` are meant to be easy to tweak.
+- The repo includes notebooks for EDA if you want to explore the data by hand.

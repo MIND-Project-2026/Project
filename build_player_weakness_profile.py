@@ -1,21 +1,5 @@
 #!/usr/bin/env python3
-"""
-Build player weakness profiles from the collected Lichess dataset.
-
-What it does:
-- reads games.csv, moves.csv, and optionally summary.csv
-- builds one weakness profile per target player
-- measures error patterns by phase, piece type, tactical motif, and time pressure
-- suggests a difficulty bucket for personalized puzzle recommendation
-- writes a flat CSV that can be used directly by recommend_personalized_puzzles.py
-
-Typical usage:
-    python build_player_weakness_profile.py
-
-    python build_player_weakness_profile.py \
-        --username some_player \
-        --output output/player_weakness_profiles.csv
-"""
+"""Build player weakness profiles from collected game data."""
 
 from __future__ import annotations
 

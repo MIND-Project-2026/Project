@@ -283,7 +283,7 @@ def _normalize_puzzles(df: pd.DataFrame) -> pd.DataFrame:
         out.loc[missing_bucket, "difficulty_score"].apply(_difficulty_bucket_from_score)
     )
 
-    # Prefer real titles, then opening_name, then fallback
+    # Prefer real titles, then opening name.
     out["title"] = _first_nonempty(
         out,
         ["title", "puzzle_title", "name", "opening_name"],

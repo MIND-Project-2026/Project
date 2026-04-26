@@ -1,20 +1,5 @@
 #!/usr/bin/env python3
-"""
-Mine puzzle candidates from the existing Lichess move dataset.
-
-The main rule is:
-- find a move that was classified as a Mistake or Blunder
-- take the *next* ply in the same game as the candidate puzzle position
-- use the engine best move from that next ply as the puzzle solution
-
-Why this works with the current dataset:
-- moves.csv stores one row per ply
-- fen_before on row N+1 is the board position *after* row N was played
-- best_move_uci / best_move_san on row N+1 describe the strongest reply from that position
-
-This script is intentionally conservative and tunable. It gives you a clean list of
-puzzle candidates to inspect and later validate with a deeper Stockfish pass.
-"""
+"""Mine puzzle candidates from moves.csv."""
 
 from __future__ import annotations
 
@@ -72,9 +57,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-# -----------------------------------------------------------------------------
 # Small helpers
-# -----------------------------------------------------------------------------
 
 
 def _safe_int(value: object, default: Optional[int] = None) -> Optional[int]:
@@ -164,9 +147,7 @@ def _guess_theme(solution_san: str, phase: str) -> str:
     return "improvement"
 
 
-# -----------------------------------------------------------------------------
 # Core mining logic
-# -----------------------------------------------------------------------------
 
 
 def index_games(games_rows: Iterable[Dict[str, str]]) -> Dict[str, Dict[str, str]]:
@@ -325,9 +306,7 @@ def mine_candidates(
     return accepted
 
 
-# -----------------------------------------------------------------------------
 # Output
-# -----------------------------------------------------------------------------
 
 
 OUTPUT_FIELDS = [

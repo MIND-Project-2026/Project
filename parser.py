@@ -1,12 +1,4 @@
-# ── core/parser.py ────────────────────────────────────────────────────────────
-# Takes a raw Lichess game dict and produces three kinds of structured rows:
-#
-#   GameRow     – one per game  (metadata, players, result, opening)
-#   MoveRow     – one per ply   (FEN, eval, cp_loss, quality, clocks, flags)
-#   SummaryRow  – one per (player × game)  (aggregated stats per game phase)
-#
-# Nothing in here does HTTP or file I/O.
-# ─────────────────────────────────────────────────────────────────────────────
+# Parse raw Lichess games into game/move/summary rows.
 
 import io
 import math
@@ -27,7 +19,7 @@ from chess_utils import (
 logger = logging.getLogger(__name__)
 
 
-# ── Small helpers ─────────────────────────────────────────────────────────────
+# Small helpers
 
 def _ms_to_utc(ms: Optional[int]) -> str:
     if not ms:
@@ -59,24 +51,17 @@ def _safe_p90(xs: list) -> float:
     return float(s[k])
 
 
-# ── Main parser ───────────────────────────────────────────────────────────────
+# Main parser
 
 def parse_game(
     game_data: dict,
     target_player: str,
 ) -> Tuple[Optional[dict], List[dict], Optional[dict]]:
-    """
-    Parse one raw Lichess game dict for `target_player`.
-
-    Returns:
-        game_row    – dict with game-level metadata  (None on failure)
-        move_rows   – list of dicts, one per ply
-        summary_row – dict with per-game aggregates for target player (None on failure)
-    """
+    """Parse one game for one target player."""
     move_rows: List[dict] = []
 
     try:
-        # ── Parse PGN ────────────────────────────────────────────────────────
+        # Parse PGN
         pgn_game = chess.pgn.read_game(io.StringIO(game_data.get("pgn", "")))
         if not pgn_game:
             return None, [], None
@@ -85,7 +70,7 @@ def parse_game(
         if not analysis:
             return None, [], None
 
-        # ── Identify players ─────────────────────────────────────────────────
+        # Identify players
         players     = game_data.get("players", {})
         white_info  = players.get("white", {})
         black_info  = players.get("black", {})
@@ -110,7 +95,7 @@ def parse_game(
         else:
             return None, [], None   # target not in this game
 
-        # ── Game metadata ─────────────────────────────────────────────────────
+        # Game metadata
         game_id      = game_data.get("id", "")
         date_utc     = _ms_to_utc(game_data.get("createdAt"))
         time_control = _time_control_str(game_data)
@@ -140,7 +125,7 @@ def parse_game(
 
         target_color_str   = "white" if target_color == chess.WHITE else "black"
 
-        # Clocks (list of remaining centiseconds after each ply)
+        # Clocks
         clocks        = game_data.get("clocks") if isinstance(game_data.get("clocks"), list) else None
         clock_initial = None
         if isinstance(game_data.get("clock"), dict):
@@ -149,11 +134,11 @@ def parse_game(
             except Exception:
                 pass
 
-        # ── Ply loop ──────────────────────────────────────────────────────────
+        # Ply loop
         board   = pgn_game.board()
         ply_idx = 0   # 0-based index into analysis[]
 
-        # Accumulators for SummaryRow
+        # Summary accumulators
         target_cp_losses: List[int]        = []
         phase_cp: dict                     = {"opening": [], "middlegame": [], "endgame": []}
         quality_counts                     = {"Good": 0, "Inaccuracy": 0, "Mistake": 0, "Blunder": 0}
@@ -165,7 +150,7 @@ def parse_game(
 
             is_target  = (side == target_color)
 
-            # Need two consecutive eval entries to compute cp_loss
+            # Need two evals for cp_loss
             has_eval = ply_idx < len(analysis) and ply_idx + 1 < len(analysis)
 
             if has_eval:
@@ -175,11 +160,11 @@ def parse_game(
                 fen_before       = board.fen()
                 phase            = infer_phase(board)
 
-                # Evals from White's perspective
+                # Evals from White POV
                 cp_before_white  = extract_cp(entry_before)
                 cp_after_white   = extract_cp(entry_after)
 
-                # Flip for target if Black
+                # Flip if target is Black
                 if target_color == chess.WHITE:
                     cp_before_target = cp_before_white
                     cp_after_target  = cp_after_white
@@ -187,7 +172,7 @@ def parse_game(
                     cp_before_target = -cp_before_white
                     cp_after_target  = -cp_after_white
 
-                # cp_loss for the moving player (only meaningful when is_target)
+                # cp_loss only matters on target moves
                 cp_loss   = None
                 quality   = ""
                 if is_target:
@@ -233,15 +218,15 @@ def parse_game(
                         pass
 
                 move_rows.append({
-                    # ── identifiers ──────────────────────────────────────────
+                    # IDs
                     "game_id":          game_id,
                     "ply":              ply,
                     "player_color":     "white" if side == chess.WHITE else "black",
                     "is_target_move":   is_target,
-                    # ── position ─────────────────────────────────────────────
+                    # Position
                     "fen_before":       fen_before,
                     "phase":            phase,
-                    # ── move ─────────────────────────────────────────────────
+                    # Move
                     "move_san":         move_san,
                     "move_uci":         move.uci(),
                     "piece_type":       ptype,
@@ -250,14 +235,14 @@ def parse_game(
                     "is_castle":        is_castle,
                     "is_promotion":     is_promotion,
                     "promotion_piece":  promo_piece,
-                    # ── engine ───────────────────────────────────────────────
+                    # Engine
                     "best_move_san":    b_move_san,
                     "best_move_uci":    b_move_uci,
                     "eval_white_before": cp_before_white,
                     "eval_white_after":  cp_after_white,
                     "cp_loss":          cp_loss if cp_loss is not None else "",
                     "move_quality":     quality,
-                    # ── clocks ───────────────────────────────────────────────
+                    # Clocks
                     "clock_before_cs":  clk_before,
                     "clock_after_cs":   clk_after,
                     "time_spent_cs":    time_spent,
@@ -266,7 +251,7 @@ def parse_game(
             board.push(move)
             ply_idx += 1
 
-        # ── GameRow ───────────────────────────────────────────────────────────
+        # Game row
         game_row = {
             "game_id":        game_id,
             "date_utc":       date_utc,
@@ -286,7 +271,7 @@ def parse_game(
             "opening_eco":    opening_eco,
             "opening_name":   opening_name,
             "opening_ply":    opening_ply,
-            # target perspective
+            # target POV
             "target_name":    target_player,
             "target_color":   target_color_str,
             "opponent_name":  opponent_name,
@@ -296,7 +281,7 @@ def parse_game(
             "target_score":   target_score,
         }
 
-        # ── SummaryRow ────────────────────────────────────────────────────────
+        # Summary row
         summary_row = {
             "target_name":              target_player,
             "game_id":                  game_id,
@@ -331,10 +316,7 @@ def parse_game(
     
 def build_player_row(username: str, elo: int, elo_bucket: str,
                      player_summaries: List[dict]) -> dict:
-    """
-    Aggregate all of a player's per-game summaries into one player row.
-    Call this after processing all games for a player.
-    """
+    """Aggregate per-game summaries into one player row."""
     if not player_summaries:
         return {}
 

@@ -1,24 +1,5 @@
 #!/usr/bin/env python3
-"""
-Build a final training-ready puzzle dataset from validated puzzle candidates.
-
-What it does:
-- reads puzzles_validated.csv
-- keeps only rows accepted by engine validation (by default)
-- deduplicates repeated positions/solutions
-- normalizes the final solution fields so training always uses engine output when available
-- creates simple theme and difficulty labels
-- writes puzzles_final.csv
-
-Typical workflow:
-    python build_final_puzzle_dataset.py \
-        --validated-csv output/puzzles_validated.csv
-
-Notes:
-- This script is intentionally heuristic. It prepares a clean dataset for model training
-  and later manual review.
-- Difficulty labels are approximate. They are useful as bootstrap labels, not ground truth.
-"""
+"""Build puzzles_final.csv from validated puzzle candidates."""
 
 from __future__ import annotations
 
@@ -150,10 +131,7 @@ def _final_theme(row: Dict[str, str], final_solution_san: str, phase: str) -> st
 
 
 def _estimate_difficulty(row: Dict[str, str], final_solution_san: str) -> Tuple[int, str]:
-    """
-    Approximate numeric difficulty score and bucket.
-    This is a bootstrap label for training and ranking, not a human-calibrated rating.
-    """
+    """Estimate puzzle difficulty score and bucket."""
     score = 0
 
     best_mate = _safe_int(row.get("engine_best_mate"))
