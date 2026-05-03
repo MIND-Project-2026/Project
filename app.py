@@ -13,15 +13,13 @@ from logic.profile_logic import (
     build_profile_from_lichess_games,
     default_profile,
 )
-from logic.puzzle_logic import board_svg, evaluate_attempt
+from logic.clickable_chessboard import clickable_chessboard
 
 BASE_DIR = Path(__file__).resolve().parent
 PUZZLES_PATH = BASE_DIR / "data" / "puzzles.csv"
 DEFAULT_TOP_N = 8
 FIXED_LICHESS_GAMES = 50
 
-
-# Page setup
 
 st.set_page_config(
     page_title="Chess Trainer Complete",
@@ -54,13 +52,6 @@ st.markdown(
     color: #475569;
     font-size: 1rem;
 }
-.card {
-    border: 1px solid #e2e8f0;
-    border-radius: 16px;
-    padding: 1rem;
-    background: #ffffff;
-    margin-bottom: 1rem;
-}
 .badge {
     display: inline-block;
     background: #eef2ff;
@@ -72,24 +63,15 @@ st.markdown(
     margin-bottom: 0.35rem;
     font-size: 0.82rem;
 }
-.reason-box {
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    padding: 0.7rem 0.8rem;
-    margin-top: 0.6rem;
-}
-.small-muted {
-    color: #64748b;
-    font-size: 0.92rem;
+.puzzle-board-center {
+    max-width: 620px;
+    margin: 0 auto;
 }
 </style>
 """,
     unsafe_allow_html=True,
 )
 
-
-# Cached data/model
 
 @st.cache_data
 def get_puzzles():
@@ -105,8 +87,6 @@ puzzles_df = get_puzzles()
 warm_model()
 
 
-# Session state
-
 def init_state() -> None:
     if "profile" not in st.session_state:
         st.session_state.profile = default_profile()
@@ -120,10 +100,8 @@ def init_state() -> None:
         st.session_state.selected_puzzle_id = None
     if "puzzle_started_at" not in st.session_state:
         st.session_state.puzzle_started_at = None
-    if "feedback" not in st.session_state:
-        st.session_state.feedback = None
-    if "board_fen" not in st.session_state:
-        st.session_state.board_fen = None
+    if "board_orientation" not in st.session_state:
+        st.session_state.board_orientation = "white"
     if "profile_visible" not in st.session_state:
         st.session_state.profile_visible = False
 
@@ -136,27 +114,16 @@ def refresh_recommendations() -> None:
     )
     st.session_state.selected_puzzle_id = None
     st.session_state.puzzle_started_at = None
-    st.session_state.feedback = None
-    st.session_state.board_fen = None
 
 
 def choose_puzzle(puzzle_row) -> None:
     st.session_state.selected_puzzle_id = puzzle_row["puzzle_id"]
-    st.session_state.board_fen = puzzle_row["fen"]
+    st.session_state.board_orientation = "white" if " w " in puzzle_row["fen"] else "black"
     st.session_state.puzzle_started_at = time.time()
-    st.session_state.feedback = None
-
-
-def reset_current_puzzle(start_fen: str) -> None:
-    st.session_state.board_fen = start_fen
-    st.session_state.puzzle_started_at = time.time()
-    st.session_state.feedback = None
 
 
 init_state()
 
-
-# Helpers
 
 def quality_label(score: float, high: str, medium: str, low: str) -> str:
     if score >= 0.95:
@@ -166,7 +133,7 @@ def quality_label(score: float, high: str, medium: str, low: str) -> str:
     return low
 
 
-def prettify_reason(reason: str) -> list[tuple[str, str]]:
+def prettify_reason(reason: str, fen: str) -> list[tuple[str, str]]:
     phase = None
     piece = None
     tactics: list[str] = []
@@ -205,6 +172,9 @@ def prettify_reason(reason: str) -> list[tuple[str, str]]:
 
     pretty: list[tuple[str, str]] = []
 
+    side_to_play = "Blancs" if " w " in fen else "Noirs"
+    pretty.append(("À jouer", side_to_play))
+
     if phase:
         pretty.append(("Phase ciblée", phase))
     if piece:
@@ -226,22 +196,23 @@ def prettify_reason(reason: str) -> list[tuple[str, str]]:
             )
         )
 
-    if not pretty and reason:
+    if len(pretty) == 1 and reason:
         pretty.append(("Raison", reason))
 
     return pretty
 
 
-def render_reason_block(reason: str) -> None:
-    items = prettify_reason(reason)
+def render_reason_block(reason: str, fen: str) -> None:
+    items = prettify_reason(reason, fen)
     if not items:
         return
-    for label, value in items:
-        st.markdown(f"- **{label}** : {value}")
-    st.markdown("</div>", unsafe_allow_html=True)
 
+    html = "".join(
+        f"<div style='margin:0; line-height:1.8; padding:0 0 2px 0;'><b>{label} :</b> {value}</div>"
+        for label, value in items
+    )
+    st.markdown(html, unsafe_allow_html=True)
 
-# Header
 
 st.markdown(
     """
@@ -255,10 +226,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-
-# Profile controls
-
-st.markdown('<div class="card">', unsafe_allow_html=True)
 st.subheader("Construire le profil")
 
 tab1, tab2, tab3 = st.tabs(["Pseudo Lichess", "Importer CSV", "Mode général"])
@@ -304,11 +271,6 @@ with tab3:
         st.session_state.profile_visible = True
         refresh_recommendations()
 
-st.markdown("</div>", unsafe_allow_html=True)
-
-
-# Profile summary
-
 st.subheader("Résumé du profil")
 
 if not st.session_state.profile_visible:
@@ -319,8 +281,8 @@ else:
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Parties", profile.get("games_count", 0))
     m2.metric("Coups", profile.get("moves_analyzed", 0))
-    m3.metric("Difficulté", profile.get("recommended_difficulty_bucket", "medium"))
-    m4.metric("Qualité", profile.get("profile_quality", "general"))
+    m3.metric("Difficulté", profile.get("recommended_difficulty_bucket", "medium").title())
+    m4.metric("Qualité", profile.get("profile_quality", "general").title())
 
     info1, info2 = st.columns(2)
     with info1:
@@ -340,11 +302,6 @@ else:
         refresh_recommendations()
         st.rerun()
 
-st.markdown("</div>", unsafe_allow_html=True)
-
-
-# Recommendations
-
 recs = st.session_state.recommendations.copy()
 
 st.subheader("Recommandations")
@@ -354,81 +311,30 @@ if recs.empty:
     st.warning("Aucune recommandation disponible.")
 else:
     for idx, row in recs.iterrows():
+        is_active = st.session_state.selected_puzzle_id == row["puzzle_id"]
+
         st.markdown(f"### {idx + 1}. {row['title']}")
-        st.markdown(
-            (
-                f"<span class='badge'>Thème : {row['theme']}</span>"
-                f"<span class='badge'>Difficulté : {row['difficulty_bucket']}</span>"
-                f"<span class='badge'>Phase : {row['phase']}</span>"
-                f"<span class='badge'>Pièce : {row['piece_type']}</span>"
-            ),
-            unsafe_allow_html=True,
-        )
 
-        render_reason_block(row.get("recommendation_reason", ""))
+        render_reason_block(row.get("recommendation_reason", ""),row["fen"])
 
-        if st.button("Choisir ce puzzle", key=f"choose_{row['puzzle_id']}"):
-            choose_puzzle(row)
-            st.rerun()
-
-        if st.session_state.selected_puzzle_id == row["puzzle_id"]:
+        st.markdown("<div style='margin-bottom: 16px;'></div>", unsafe_allow_html=True)
+        if not is_active:
+            if st.button("Choisir ce puzzle", key=f"choose_{row['puzzle_id']}"):
+                choose_puzzle(row)
+                st.rerun()
+                
+        if is_active:
             puzzle = row
-            current_fen = st.session_state.board_fen or puzzle["fen"]
+            start_fen = puzzle["fen"]
+            board_orientation = "white" if " w " in start_fen else "black"
             elapsed = int(time.time() - st.session_state.puzzle_started_at) if st.session_state.puzzle_started_at else 0
-            feedback = st.session_state.feedback
-            solved = bool(feedback and feedback.get("solved"))
-
-            side = "Blancs" if " w " in current_fen else "Noirs"
-            st.markdown(
-                (
-                    f"<span class='badge'>À jouer : {side}</span>"
-                    f"<span class='badge'>Chrono : {elapsed}s</span>"
-                    f"<span class='badge'>Difficulté : {puzzle['difficulty_bucket']}</span>"
-                ),
-                unsafe_allow_html=True,
+            st.markdown('<div class="puzzle-board-center">', unsafe_allow_html=True)
+            clickable_chessboard(
+                fen=start_fen,
+                orientation=board_orientation,
+                expected_uci=puzzle["solution_uci"],
+                key=f"click_board_{puzzle['puzzle_id']}",
             )
-            st.write(f"**Objectif :** {puzzle['explanation']}")
-            st.components.v1.html(board_svg(current_fen), height=430, scrolling=False)
-
-            if not solved:
-                user_move = st.text_input(
-                    "Entre ton coup",
-                    key=f"move_input_{puzzle['puzzle_id']}_{current_fen}",
-                    placeholder="ex: e2e4 ou Qe8#",
-                )
-                a1, a2 = st.columns(2)
-                with a1:
-                    if st.button("Valider le coup", key=f"validate_{puzzle['puzzle_id']}", use_container_width=True):
-                        result = evaluate_attempt(current_fen, puzzle["solution_uci"], user_move)
-                        st.session_state.feedback = result
-                        if result["status"] == "correct":
-                            st.session_state.board_fen = result["board_fen"]
-                        else:
-                            st.session_state.board_fen = puzzle["fen"]
-                        st.rerun()
-                with a2:
-                    if st.button("Réinitialiser", key=f"reset_{puzzle['puzzle_id']}", use_container_width=True):
-                        reset_current_puzzle(puzzle["fen"])
-                        st.rerun()
-            else:
-                a1, a2 = st.columns(2)
-                with a1:
-                    if st.button("Rejouer", key=f"replay_{puzzle['puzzle_id']}", use_container_width=True):
-                        reset_current_puzzle(puzzle["fen"])
-                        st.rerun()
-                with a2:
-                    if st.button("Fermer", key=f"close_{puzzle['puzzle_id']}", use_container_width=True):
-                        st.session_state.selected_puzzle_id = None
-                        st.session_state.board_fen = None
-                        st.session_state.feedback = None
-                        st.rerun()
-
-            if feedback:
-                if feedback["status"] == "correct":
-                    st.success(feedback["message"])
-                elif feedback["status"] == "wrong":
-                    st.error(feedback["message"])
-                else:
-                    st.warning(feedback["message"])
+            st.markdown("</div>", unsafe_allow_html=True)
 
         st.divider()
