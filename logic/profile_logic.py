@@ -468,26 +468,3 @@ def _normalize_csv_rows(df: pd.DataFrame) -> Tuple[Dict[str, Dict[str, Any]], Li
         )
 
     return user_games, user_moves
-
-
-def build_profile_from_csv(df: pd.DataFrame):
-    if df is None or df.empty:
-        profile = default_profile(source="general", username="")
-        profile["message"] = "CSV vide. Recommandations générales activées."
-        return profile
-
-    user_games, user_moves = _normalize_csv_rows(df)
-
-    profile = _build_profile_with_original_scorer(
-        username="uploaded_csv",
-        user_games=user_games,
-        user_moves=user_moves,
-        user_summaries=[],
-        source="csv",
-        success_message=f"Profil personnalisé construit sur {len(user_games)} parties et {len(user_moves)} coups CSV.",
-    )
-
-    if profile.get("source") == "general":
-        profile["message"] = "CSV insuffisant pour personnaliser correctement. Recommandations générales activées."
-
-    return profile

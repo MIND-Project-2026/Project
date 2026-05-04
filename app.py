@@ -5,11 +5,9 @@ from pathlib import Path
 
 import streamlit as st
 
-from logic.csv_logic import validate_history_csv
 from logic.lichess_logic import check_lichess_username, fetch_games_as_pgn
 from logic.model_logic import load_puzzles, rank_puzzles, train_or_load_model
 from logic.profile_logic import (
-    build_profile_from_csv,
     build_profile_from_lichess_games,
     default_profile,
 )
@@ -213,13 +211,12 @@ def render_reason_block(reason: str, fen: str) -> None:
     )
     st.markdown(html, unsafe_allow_html=True)
 
-
 st.markdown(
     """
 <div class="hero">
     <h1>♟️ Chess Trainer Complete</h1>
     <p>
-        Profil joueur, recommandations ciblées, puis puzzle interactif.
+        Profil joueur, Recommandations ciblées, puis Puzzle interactif.
     </p>
 </div>
 """,
@@ -227,57 +224,30 @@ st.markdown(
 )
 
 st.subheader("Construire le profil")
+username = st.text_input("Pseudo Lichess", placeholder="ex: Ediz_Gurel")
+if st.button("Construire le profil depuis Lichess", use_container_width=True):
+    ok, msg = check_lichess_username(username)
+    if not ok:
+        st.error(msg)
+    else:
+        with st.spinner("Récupération des parties et construction du profil..."):
+            games, _ = fetch_games_as_pgn(username, max_games=FIXED_LICHESS_GAMES)
 
-tab1, tab2, tab3 = st.tabs(["Pseudo Lichess", "Importer CSV", "Mode général"])
-
-with tab1:
-    username = st.text_input("Pseudo Lichess", placeholder="ex: Hikaru")
-    if st.button("Construire le profil depuis Lichess", use_container_width=True):
-        ok, msg = check_lichess_username(username)
-        if not ok:
-            st.error(msg)
+        if len(games) < FIXED_LICHESS_GAMES:
+            st.error("Ce joueur doit avoir au moins 50 parties analysées disponibles sur Lichess.")
         else:
-            with st.spinner("Récupération des parties et construction du profil..."):
-                games, _ = fetch_games_as_pgn(username, max_games=FIXED_LICHESS_GAMES)
-
-            if len(games) < FIXED_LICHESS_GAMES:
-                st.error("Ce joueur doit avoir au moins 50 parties analysées disponibles sur Lichess.")
+            profile = build_profile_from_lichess_games(username, games)
+            if int(profile.get("games_count", 0)) < FIXED_LICHESS_GAMES:
+                st.error("Ce joueur doit avoir au moins 50 parties analysables pour construire le profil.")
             else:
-                profile = build_profile_from_lichess_games(username, games)
-                if int(profile.get("games_count", 0)) < FIXED_LICHESS_GAMES:
-                    st.error("Ce joueur doit avoir au moins 50 parties analysables pour construire le profil.")
-                else:
-                    st.session_state.profile = profile
-                    st.session_state.profile_visible = True
-                    refresh_recommendations()
-                    st.success("Profil chargé.")
-
-with tab2:
-    uploaded = st.file_uploader("Historique CSV", type=["csv"])
-    if uploaded is not None and st.button("Construire le profil depuis le CSV", use_container_width=True):
-        valid, msg, df = validate_history_csv(uploaded)
-        if not valid:
-            st.error(msg)
-        else:
-            with st.spinner("Validation et construction du profil..."):
-                st.session_state.profile = build_profile_from_csv(df)
+                st.session_state.profile = profile
                 st.session_state.profile_visible = True
                 refresh_recommendations()
-            st.success("Profil CSV chargé.")
+                st.success("Profil chargé.")
 
-with tab3:
-    if st.button("Activer le mode général", use_container_width=True):
-        st.session_state.profile = default_profile()
-        st.session_state.profile_visible = True
-        refresh_recommendations()
-
-st.subheader("Résumé du profil")
-
-if not st.session_state.profile_visible:
-    st.caption("Aucun profil chargé pour le moment.")
-else:
+if st.session_state.profile_visible:
+    st.subheader("Résumé du profil")
     profile = st.session_state.profile
-
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Parties", profile.get("games_count", 0))
     m2.metric("Coups", profile.get("moves_analyzed", 0))
@@ -298,15 +268,11 @@ else:
         st.write(f"**Pièce faible :** {profile.get('primary_weak_piece', '-')}")
         st.write(f"**Motif faible :** {profile.get('primary_weak_tactic', '-')}")
 
-    if st.button("Recalculer les recommandations"):
-        refresh_recommendations()
-        st.rerun()
-
 recs = st.session_state.recommendations.copy()
-
-st.subheader("Recommandations")
-st.caption("Le puzzle choisi s’ouvre juste en dessous de sa carte.")
-
+if st.session_state.profile_visible:
+    st.subheader("Recommandations")
+else :
+    st.subheader("Recommandations Générales")
 if recs.empty:
     st.warning("Aucune recommandation disponible.")
 else:
