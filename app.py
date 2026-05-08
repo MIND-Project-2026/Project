@@ -199,7 +199,24 @@ def prettify_reason(reason: str, fen: str) -> list[tuple[str, str]]:
 
     return pretty
 
-
+def render_reason_block_with_title(title: str, idx: int, reason: str, fen: str) -> None:
+    items = prettify_reason(reason, fen)
+    
+    rows_html = "".join(
+        f"<div style='margin:0; line-height:1.8; padding:0 0 2px 0;'><b>{label} :</b> {value}</div>"
+        for label, value in items
+    )
+    
+    st.markdown(
+        f"""
+        <div style='margin-bottom: 8px;'>
+            <div style='font-size:1.1rem; font-weight:700; margin-bottom:6px;'>{idx + 1}. {title}</div>
+            {rows_html}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    
 def render_reason_block(reason: str, fen: str) -> None:
     items = prettify_reason(reason, fen)
     if not items:
@@ -281,7 +298,7 @@ else:
 
         st.markdown(f"### {idx + 1}. {row['title']}")
 
-        render_reason_block(row.get("recommendation_reason", ""),row["fen"])
+        render_reason_block_with_title(row['title'], idx, row.get("recommendation_reason", ""), row["fen"])
 
         st.markdown("<div style='margin-bottom: 16px;'></div>", unsafe_allow_html=True)
         if not is_active:
