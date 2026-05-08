@@ -24,4 +24,4 @@ build/
 
 large_data/
 data/
-models/
+models/.env
