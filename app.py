@@ -210,7 +210,7 @@ def render_reason_block_with_title(title: str, idx: int, reason: str, fen: str) 
     st.markdown(
         f"""
         <div style='margin-bottom: 8px;'>
-            <div style='font-size:1.1rem; font-weight:700; margin-bottom:6px;'>{idx + 1}. {title}</div>
+            <div style='font-size:1.7rem; font-weight:500; margin-bottom:15px;'>{idx + 1}. {title}</div>
             {rows_html}
         </div>
         """,
