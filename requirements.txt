@@ -1,6 +1,8 @@
 streamlit>=1.52
 pandas
-requests
+numpy
 python-chess
+requests
+python-dotenv
+scikit-learn
 joblib
-scikit-learn==1.6.1
