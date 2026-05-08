@@ -297,6 +297,7 @@ else:
         is_active = st.session_state.selected_puzzle_id == row["puzzle_id"]
 
         render_reason_block_with_title(row['title'], idx, row.get("recommendation_reason", ""), row["fen"])
+        render_reason_block_with_title(row['title'], idx, row.get("recommendation_reason", ""), row["fen"])
 
         st.markdown("<div style='margin-bottom: 16px;'></div>", unsafe_allow_html=True)
         if not is_active:
