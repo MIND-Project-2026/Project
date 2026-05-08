@@ -296,8 +296,6 @@ else:
     for idx, row in recs.iterrows():
         is_active = st.session_state.selected_puzzle_id == row["puzzle_id"]
 
-        st.markdown(f"### {idx + 1}. {row['title']}")
-
         render_reason_block_with_title(row['title'], idx, row.get("recommendation_reason", ""), row["fen"])
 
         st.markdown("<div style='margin-bottom: 16px;'></div>", unsafe_allow_html=True)

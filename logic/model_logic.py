@@ -628,12 +628,36 @@ def _fallback_rank(profile: pd.Series, puzzles_df: pd.DataFrame, top_n: int) -> 
 
     out["model_score"] = model_score
     out["priority_score"] = model_score
-    out["recommendation_reason"] = out.apply(
-        lambda r: f"Heuristique: phase {r['phase']}; pièce {r['piece_type']}; motif {r['theme']}",
-        axis=1,
-    )
+    out["recommendation_reason"] = out.apply(lambda r: _build_fallback_reason(r, profile), axis=1)
     return out.sort_values(["priority_score", "difficulty_score"], ascending=[False, True]).head(top_n).reset_index(drop=True)
 
+def _build_fallback_reason(r, profile):
+    phase = str(r.get("phase", "middlegame") or "middlegame")
+    piece = str(r.get("piece_type", "Pawn") or "Pawn").lower()
+    theme = str(r.get("theme", "") or "")
+    
+    tactic_map = {
+        "mate": "check", "check": "check", "tactical-check": "check",
+        "capture": "capture", "promotion": "promotion",
+        "endgame-technique": "quiet", "improvement": "quiet",
+    }
+    tactic = tactic_map.get(theme, "quiet")
+    
+    phase_val = float(profile.get(f"weakness_{phase}_score", 1.0))
+    piece_val = float(profile.get(f"weakness_{piece}_score", 1.0))
+    tactic_val = float(profile.get(f"weakness_{tactic}_score", 1.0))
+    player_bucket = str(profile.get("recommended_difficulty_bucket", "medium"))
+    puzzle_bucket = str(r.get("difficulty_bucket", "medium"))
+    diff_fit = _difficulty_fit(player_bucket, puzzle_bucket)
+    gap = _gap_bonus(r)
+    
+    return (
+        f"phase:{phase}={phase_val:.2f}; "
+        f"piece:{piece}={piece_val:.2f}; "
+        f"difficulty_fit={diff_fit:.2f}; "
+        f"gap_bonus={gap:.2f}; "
+        f"tactic:{tactic}={tactic_val:.2f}"
+    )
 
 def rank_puzzles(profile: Dict[str, Any], puzzles_df: pd.DataFrame, top_n: int = 8) -> pd.DataFrame:
     prof = _normalize_profile(profile)
