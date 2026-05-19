@@ -33,7 +33,6 @@ DEFAULT_PROFILES = "output/player_weakness_profiles.csv"
 DEFAULT_PUZZLES = "output/puzzles_final.csv"
 DEFAULT_OUTPUT_DIR = "output/model_artifacts"
 DEFAULT_RECOMMEND_OUTPUT = "output/personalized_puzzles_model.csv"
-DIFFICULTY_ORDER = {"easy": 0, "medium": 1, "hard": 2, "expert": 3}
 PHASES = ["opening", "middlegame", "endgame"]
 PIECES = ["pawn", "knight", "bishop", "rook", "queen", "king"]
 TACTICS = ["capture", "check", "castle", "promotion", "quiet"]
@@ -115,10 +114,6 @@ PAIR_FEATURES_NUMERIC = [
     "phase_match_score",
     "piece_match_score",
     "tactic_match_score",
-    "difficulty_fit_score",
-    "gap_bonus",
-    "engine_bonus",
-    "time_component",
 ]
 
 PAIR_FEATURES_CATEGORICAL = [
@@ -211,12 +206,6 @@ def _load_csv(path: str) -> pd.DataFrame:
     return pd.read_csv(path)
 
 
-def _difficulty_fit(player_bucket: str, puzzle_bucket: str) -> float:
-    if player_bucket not in DIFFICULTY_ORDER or puzzle_bucket not in DIFFICULTY_ORDER:
-        return 0.6
-    delta = abs(DIFFICULTY_ORDER[player_bucket] - DIFFICULTY_ORDER[puzzle_bucket])
-    return {0: 1.0, 1: 0.75, 2: 0.35}.get(delta, 0.1)
-
 
 def _solution_tags(solution_tags: str) -> List[str]:
     text = (solution_tags or "").strip()
@@ -258,79 +247,64 @@ def _piece_score(puzzle: pd.Series, profile: pd.Series) -> Tuple[float, str]:
     return value or 1.0, piece
 
 
-def _gap_bonus(puzzle: pd.Series) -> float:
-    gap = _safe_float(puzzle.get("best_vs_second_gap_cp"), 0.0) or 0.0
-    if gap >= 400:
-        return 1.0
-    if gap >= 250:
-        return 0.8
-    if gap >= 120:
-        return 0.6
-    if gap > 0:
-        return 0.35
-    return 0.0
 
+def _recommendation_reason(
+    phase: str,
+    phase_value: float,
+    piece: str,
+    piece_value: float,
+    tactic: str,
+    tactic_value: float,
+    heuristic_score: float,
+) -> str:
+    """Explain the pure weakness-match heuristic.
 
-def _engine_bonus(puzzle: pd.Series) -> float:
-    valid = _normalize_bool(puzzle.get("is_valid_puzzle"))
-    has_engine = _normalize_bool(puzzle.get("has_engine_solution")) or bool(str(puzzle.get("engine_best_move_uci", "") or "").strip())
-    bonus = 0.0
-    if valid:
-        bonus += 0.35
-    if has_engine:
-        bonus += 0.25
-    return bonus
+    The heuristic is intentionally simple and equally weighted:
 
+        score = (phase weakness + piece weakness + tactic weakness) / 3
 
-def _recommendation_reason(phase: str, phase_value: float, piece: str, piece_value: float, diff_fit: float, gap_bonus: float, tactic_reasons: Sequence[str]) -> str:
+    Difficulty fit, engine clarity, gap bonuses, and time-trouble bonuses are not
+    included here. Those can still be handled as filters or raw puzzle features,
+    but they no longer change the personalized weakness-match score.
+    """
     reasons = [
         f"phase:{phase}={phase_value:.2f}",
         f"piece:{piece}={piece_value:.2f}",
-        f"difficulty_fit={diff_fit:.2f}",
-        f"gap_bonus={gap_bonus:.2f}",
+        f"tactic:{tactic}={tactic_value:.2f}",
+        f"weakness_match={heuristic_score:.2f}",
     ]
-    reasons.extend(list(tactic_reasons[:2]))
     return "; ".join(reasons)
 
 
 def pair_features(profile: pd.Series, puzzle: pd.Series) -> Dict[str, Any]:
     phase_value, phase_name = _phase_score(puzzle, profile)
     piece_value, piece_name = _piece_score(puzzle, profile)
-    tactic_value, tactic_name, tactic_reasons = _puzzle_tactic_scores(puzzle, profile)
-    player_bucket = str(profile.get("recommended_difficulty_bucket", "medium") or "medium").strip()
+    tactic_value, tactic_name, _ = _puzzle_tactic_scores(puzzle, profile)
     puzzle_bucket = str(puzzle.get("difficulty_bucket", "") or "").strip()
-    diff_fit = _difficulty_fit(player_bucket, puzzle_bucket)
-    gap_bonus = _gap_bonus(puzzle)
-    engine_bonus = _engine_bonus(puzzle)
-    time_trouble_score = _safe_float(profile.get("time_trouble_weakness_score"), 1.0) or 1.0
-    time_component = 0.15 * max(0.6, min(1.6, time_trouble_score))
 
-    heuristic_score = (
-        35.0 * phase_value
-        + 25.0 * piece_value
-        + 20.0 * tactic_value
-        + 12.0 * diff_fit
-        + 5.0 * gap_bonus
-        + 3.0 * engine_bonus
-        + time_component
-    )
+    # Pure weakness-match heuristic: each dimension contributes exactly one third.
+    heuristic_score = (phase_value + piece_value + tactic_value) / 3.0
 
     row: Dict[str, Any] = {
         "username": str(profile.get("username", "") or ""),
         "puzzle_id": str(puzzle.get("puzzle_id", "") or ""),
         "game_id": str(puzzle.get("game_id", "") or ""),
         "heuristic_score": heuristic_score,
-        "recommendation_reason": _recommendation_reason(phase_name, phase_value, piece_name, piece_value, diff_fit, gap_bonus, tactic_reasons),
+        "recommendation_reason": _recommendation_reason(
+            phase_name,
+            phase_value,
+            piece_name,
+            piece_value,
+            tactic_name,
+            tactic_value,
+            heuristic_score,
+        ),
         "matched_phase": phase_name,
         "matched_piece": piece_name,
         "matched_tactic": tactic_name,
         "phase_match_score": phase_value,
         "piece_match_score": piece_value,
         "tactic_match_score": tactic_value,
-        "difficulty_fit_score": diff_fit,
-        "gap_bonus": gap_bonus,
-        "engine_bonus": engine_bonus,
-        "time_component": time_component,
         "difficulty_bucket": puzzle_bucket,
         "final_theme": str(puzzle.get("final_theme", "") or ""),
     }
@@ -340,7 +314,6 @@ def pair_features(profile: pd.Series, puzzle: pd.Series) -> Dict[str, Any]:
     for col in PUZZLE_FEATURES_NUMERIC + PUZZLE_FEATURES_CATEGORICAL:
         row[f"puzzle__{col}"] = puzzle.get(col, np.nan)
     return row
-
 
 def filter_puzzles(puzzles: pd.DataFrame, only_valid: bool, min_gap_cp: int) -> pd.DataFrame:
     out = puzzles.copy()
@@ -684,7 +657,6 @@ def recommend_mode(args: argparse.Namespace) -> None:
             "phase_match_score": round(float(row["phase_match_score"]), 4),
             "piece_match_score": round(float(row["piece_match_score"]), 4),
             "tactic_match_score": round(float(row["tactic_match_score"]), 4),
-            "difficulty_fit_score": round(float(row["difficulty_fit_score"]), 4),
             "puzzle_id": row["puzzle_id"],
             "game_id": row["game_id"],
             "final_theme": row.get("final_theme", ""),
